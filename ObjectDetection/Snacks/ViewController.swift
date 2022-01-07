@@ -168,7 +168,7 @@ class ViewController: UIViewController {
       if let cameraIntrinsicMatrix = CMGetAttachment(sampleBuffer, key: kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, attachmentModeOut: nil) {
         options[.cameraIntrinsics] = cameraIntrinsicMatrix
       }
-
+        
       let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: options)
       do {
         try handler.perform([self.visionRequest])
@@ -181,12 +181,59 @@ class ViewController: UIViewController {
 
   func processObservations(for request: VNRequest, error: Error?) {
     //call show function
+      if error != nil {
+          print(error!)
+          return
+      }
+      let results = request.results
+      var predictions : [VNRecognizedObjectObservation] = []
+      if results != nil {
+          for result in results! {
+              predictions.append(result as! VNRecognizedObjectObservation)
+          }
+          self.show(predictions: predictions)
+      }
   }
 
   func show(predictions: [VNRecognizedObjectObservation]) {
    //process the results, call show function in BoundingBoxView
+      let num = min(predictions.count, self.maxBoundingBoxViews)
+      DispatchQueue.main.sync(execute: {
+          for i in 0 ..< num {
+              let prediction: VNRecognizedObjectObservation = predictions[i]
+              let boundingBox: CGRect = prediction.boundingBox
+              let labels = prediction.labels
+              let label = labels[0].identifier
+              let confidence: Float = labels[0].confidence * 100
+              let color: UIColor? = self.colors[label]
+              let screenBounds: CGRect = UIScreen.main.bounds
+              let screenWidth: CGFloat = screenBounds.width 
+              let screenHeight: CGFloat = screenBounds.height
+              let frame: CGRect = CGRect(x: boundingBox.minX * screenWidth,
+                                                          y: boundingBox.minY * screenHeight,
+                                                          width: boundingBox.width * screenWidth,
+                                                          height: boundingBox.height * screenHeight)
+              if color != nil {
+                  self.boundingBoxViews[i].show(frame: frame, label: label + ":" + String(confidence) + "%", color: color!)
+              }
+              else {
+                  print("Error: no match color for label " + label)
+              }
+          }
+          
+      })
+      
+      usleep(400000)
+      
+      DispatchQueue.main.sync(execute: {
+          for i in 0 ..< num {
+              self.boundingBoxViews[i].hide()
+          }
+      })
+      
+  }
 }
-
+    
 extension ViewController: VideoCaptureDelegate {
   func videoCapture(_ capture: VideoCapture, didCaptureVideoFrame sampleBuffer: CMSampleBuffer) {
     predict(sampleBuffer: sampleBuffer)
